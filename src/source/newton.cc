@@ -1,40 +1,55 @@
 #include "newton.hpp"
 #include "colors.hpp"
+#include "newtonConfig.h"
 
 #include <filesystem>
 #include <ctime>
 #include <string>
 #include <stdio.h>
 #include <fstream>
+#include <sstream>
+#include <iostream>
+#include <exception>
 
 #ifndef WIN32
 #include <unistd.h>
 #endif
 
-void App::createNewProject(const char* argv[])
+App::App(const std::string& projectName)
+	: m_projectName {projectName}
 {
-	clock_t start = clock(), end = 0;
+	if (m_projectName.empty()) {
+		throw std::runtime_error("Empty project received !");
+	}
+}
 
-	printf("%sCreating directory ....\n%s",GREEN,WHITE);
+void App::create()
+{
+	clock_t startTime {0};
+	clock_t endTime {0};
 
-	std::string cmdString{};
-	createDir(argv[2]);
-	printf("%sGenerating Code for main.c and CMakeLists.txt ....\n%s",GREEN,WHITE);
+	std::cout << GREEN << "Creating directory..." << WHITE << "\n";
 
-	generateCppTemplateFile(argv[2]);
-	generateCmakeFile(argv[2]);
-	generateNewtonFile(projectName);
-	generateGitIgnoreFile();
+	startTime = clock();
+	const auto success = createProject();
+	if (success) {
 
+		std::cout << GREEN << "Generating Code for main.c and CMakeLists.txt..." 
+			<< WHITE << "\n";
 
-	end = clock();
+		generateCppTemplateFile();
+		generateCmakeFile();
+		generateNewtonFile();
+		generateGitIgnoreFile();
+	}
+	endTime = clock();
 
-	printf("%sElapsed Time : %8.2fms\nWith great power comes great responsibility\n%s", YELLOW, difftime(end, start),WHITE);
+	printf("%sElapsed Time : %8.2fms\nWith great power comes great responsibility\n%s", YELLOW, difftime(endTime, startTime),WHITE);
 };
 
 void App::compile()
 {
-	printf("%sCompile Process has been started ....\n%s",BLUE,WHITE);
+	printf("%sCompile Process has been started...\n%s",BLUE,WHITE);
 #ifdef WIN32
 	if (!system("cmake -S . -B build -G \"MinGW Makefiles\" "))
 	{
@@ -61,9 +76,8 @@ void App::compile()
 
 void App::run()
 {
-	std::string output{};
-	readNewtonFile(output);
-	projectName = output;
+	std::string projectName;
+	readNewtonFile(projectName);
 
 	std::string run{};
 	//printf("%s%s: \n%s", YELLOW, projectName.c_str(),WHITE);
@@ -96,146 +110,174 @@ void App::setup()
 	printf("\n%sthis feature is currently in development or maybe your CLI is not up to date!\n%s",CYAN,WHITE);
 };
 
-void App::generateNewtonFile(const std::string& path)
+void App::generateNewtonFile()
 {
-	std::string newFileName{ path };
-	newFileName += "/setting.nn";
-	std::ofstream file(newFileName.c_str(), std::ios::out);
-	if (file.is_open())
-	{
-		time_t now{ time(NULL) };
-		const char* dateTime{ ctime(&now) };
+	std::stringstream ss;
+	ss << m_projectName << "/setting.nn";
 
-		file << projectName << "\n";
-		file << "Project created on " <<dateTime<< "\n";
-		printf("%sProject Creation date : %s%s", YELLOW, dateTime, WHITE);
+	std::ofstream file(ss.str(), std::ios::out);
+	if (file.is_open()) {
+		time_t now {time(NULL)};
+		const char* dateTime {ctime(&now)};
+		file << m_projectName << "\n";
+		file << "Project created on " << dateTime << "\n";
+		std::cout << YELLOW << "Project Creation date :" << dateTime << WHITE << "\n";
 		file << "Note: Please don't remove or edit this file!\n";
 		file.close();
-	}
-	else
-	{
-		printf("%ssomething went wrong!\n%s",RED,WHITE);
+	} else {
+		std::cerr << RED << "Something went wrong!\n" << WHITE << "\n";
 	}
 }
 
 void App::readNewtonFile(std::string& output)
 {
-	std::ifstream file("setting.nn");
-	if (file.is_open())
-	{
+	std::stringstream ss;
+	ss << m_projectName << "/setting.nn";
+
+	std::ifstream file(ss.str());
+	if (file.is_open()) {
 		std::getline(file, output);
 		std::string dateTime{};
 		std::getline(file, dateTime);
-		printf("%s[%s: %s]%s\n\n", YELLOW,output.c_str() ,dateTime.c_str(), WHITE);
+		printf("%s[%s: %s]%s\n\n", YELLOW, output.c_str() ,dateTime.c_str(), WHITE);
 		file.close();
-	}
-	else
-	{
+	} else {
 		printf("%snewton file setting.nn doesn't exist!\n%s",RED,WHITE);
-	};
+	}
 }
 
-void App::createDir(const char* argv)
+bool App::createProject()
 {
 	namespace fs = std::filesystem;
-	std::string cmdString{};
-	cmdString += argv;
-	if (fs::create_directory(cmdString.c_str()))
-	{
-		cmdString += "/build";
-		fs::create_directory(cmdString.c_str());
-		auto pos = cmdString.find("/");
-		cmdString.replace(pos + 1, cmdString.length() - pos, "src");
+	auto status {false};
+	std::string errorMsg {"Failed to create "};
 
-		fs::create_directory(cmdString.c_str());
-		pos = cmdString.find("/");
-		cmdString.replace(pos + 1, cmdString.length() - pos, "res");
-		fs::create_directory(cmdString.c_str());
-	}
-	else {
-		printf("%sfailed to create dir error!%s",RED,WHITE);
-		exit(0);
+	// Check project already exist
+	if (fs::exists(m_projectName)) {
+		std::cerr << RED << m_projectName 
+			<< " already exist unable to create project" << WHITE << "\n";
+		return false;
 	}
 
+	// Create project folder
+	status = fs::create_directories(m_projectName);
+	if (status != true) {
+		errorMsg += m_projectName;
+		goto ERROR;
+	}
+
+	// Create build folder
+	status = fs::create_directories(m_projectName + "/build");
+	if (status != true) {
+		errorMsg += m_projectName + "/build";
+		goto ERROR;
+	}
+
+	// Create src folder
+	fs::create_directories(m_projectName + "/src");
+	if (status != true) {
+		errorMsg += m_projectName + "/src";
+		goto ERROR;
+	}
+
+	// Create res folder
+	fs::create_directories(m_projectName + "/res");
+	if (status != true) {
+		errorMsg += m_projectName + "/res";
+		goto ERROR;
+	}
+
+ERROR:
+	if (status != true) {
+		std::cerr << RED << errorMsg << WHITE << "\n";
+	}
+
+	return status;
 };
 
-void App::generateCppTemplateFile(const char* argv)
+std::string cppTemplate()
 {
-	std::ofstream file;
-	// const std::string stdStr{argv[2]};
-	projectName = argv;
-	file.open("./" + projectName + "/src/main.cc", std::ios::out);
+	std::string brief{R"(/**
+ * @brief Auto generated C++ file by newton CLI
+ *        )"};
+ 
+    brief += NEWTON_COPYRIGHT;
+	brief += "\n */";
 
-	if (file.is_open())
-	{
-		std::string mainCode{
-			R"(
-//Auto Genrated C++ file by newton CLI
-//Copyright 2023 Vishal Ahirwar //replace it with yout copyright notice!
+	std::string main {R"(
+
 #include<iostream>
-int main(int argc,char*argv[])
+
+int main(int argc, char** argv)
 {
-    std::cout<<"@";
+    std::cout << "Hello, test\n";
+    std::cout << "Happy coding journey :)\n";
+
     return 0;
 };
 
-)" };
-		auto pos = mainCode.find("@");
-		std::string str{ std::string("Hello, ") + projectName + std::string("\\nhappy coding journey :)\\n") };
-		mainCode.insert(pos + 1, str);
-		file << mainCode;
-		file.close();
-	};
+	)"};
+
+	return brief + main;
 }
 
-void App::generateCmakeFile(const char* argv)
+std::string App::cmakeTemplate()
+{
+	std::string script {""};
+	script += "# Auto Genrated CMake file by newton CLI\n";
+	script += "# ";
+	script += NEWTON_COPYRIGHT;
+	script += "\n";
+	script += "cmake_minimum_required(VERSION 3.0.0)\n";
+	script += "set(CMAKE_CXX_STANDARD 17)\n";
+	script += "\n";
+	script += "project(" + m_projectName + " VERSION 1.0.0)\n";
+	script += "\n";
+	script += "# Add your additional source file here!\n";
+	script += "set(SOURCE src/main.cc)\n";
+	script += "\n";
+	script += "add_executable(${PROJECT_NAME} ${SOURCE})\n";
+	script += "\n";
+	script += "install(TARGETS ${PROJECT_NAME} DESTINATION bin)\n";
+
+	return script;
+}
+
+void App::generateCppTemplateFile()
 {
 	std::ofstream file;
-	file.open("./" + projectName + "/CMakeLists.txt", std::ios::out);
-	if (file.is_open())
-	{
-		const std::string cmakeCode{
-			R"(
-#Auto Genrated CMake file by newton CLI
-#Copyright 2023 Vishal Ahirwar. #replace with your copyright notice.
-cmake_minimum_required(VERSION 3.0)
-set(CMAKE_CXX_STANDARD 17))" };
-		file << cmakeCode << "\n";
-		file << "project(" << argv << ")\n";
-		file << "set(SOURCE ./src/main.cc)#add your additional source file here!\n";
-		/*
-		set(SOURCE ./src/main.cc ./src/player.cc ./src/person.cc)
-		add_executable(${PROJECT_NAME} ${SOURCE})*/
-		file << "add_executable(${PROJECT_NAME} ${SOURCE})\n";
-		file << "install(TARGETS ${PROJECT_NAME} DESTINATION bin)\n";
+	std::stringstream ss;
+	ss << m_projectName << "/src/main.cc";
+	
+	file.open(ss.str(), std::ios::out);
+	if (file.is_open()) {
+		file << cppTemplate();
 		file.close();
-	};
+	}
+}
+
+void App::generateCmakeFile()
+{
+	std::ofstream file;
+	std::stringstream ss;
+	ss << m_projectName << "/CMakeLists.txt";
+
+	file.open(ss.str(), std::ios::out);
+	if (file.is_open()) {
+		file << cmakeTemplate();
+		file.close();
+	}
 }
 
 void App::generateGitIgnoreFile()
 {
 	std::ofstream file;
-	file.open("./" + projectName + "/.gitignore", std::ios::out);
-	if (file.is_open())
-	{
-		const std::string cmakeCode{
-			R"(
-CMakeLists.txt.user
-CMakeCache.txt
-CMakeFiles
-CMakeScripts
-Testing
-Makefile
-cmake_install.cmake
-install_manifest.txt
-compile_commands.json
-CTestTestfile.cmake
-_deps
+	std::stringstream ss;
+	ss << m_projectName << "/.gitignore";
 
-)" };
-		file << cmakeCode;
-
+	file.open(ss.str(), std::ios::out);
+	if (file.is_open()) {
+		file << "build";
 		file.close();
-	};
+	}
 }
-;

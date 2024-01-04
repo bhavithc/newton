@@ -4,20 +4,22 @@
 
 class App
 {
-private:
-    std::string projectName;
 
 public:
-      void createNewProject(const char *argv[]);
+      App(const std::string& projectName);
+      void create();
       void compile();
       void run();
       void build();
       void setup();
 private:
-      void generateNewtonFile(const std::string &);
+      void generateNewtonFile();
       void readNewtonFile(std::string &);
-      void createDir(const char *);
-      void generateCppTemplateFile(const char *);
-      void generateCmakeFile(const char *);
+      bool createProject();
+      void generateCppTemplateFile();
+      std::string cmakeTemplate();
+      void generateCmakeFile();
       void generateGitIgnoreFile();
+
+      std::string m_projectName {""};
 };

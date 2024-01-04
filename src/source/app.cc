@@ -6,7 +6,6 @@
 #include <string>
 #include <stdio.h>
 
-extern int argCount;
 namespace CLI
 {
     int showHelp()
@@ -19,37 +18,45 @@ namespace CLI
             NEWTON_COMPANY, NEWTON_COPYRIGHT, CYAN, GREEN, WHITE);
         return 0;
     }
-    int createApp(const char *argv[])
+
+    int createApp(int argc, const char *argv[])
     {
-        App app;
+        std::string projectName {argv[3]};
+
         if (std::string(argv[1]) == std::string("create"))
         {
-            if (argCount < 3)
+            if (argc < 3)
             {
                 printf("[Error]Project name can't be null!\n");
                 return 1;
             };
 
-            app.createNewProject(argv);
+            App app {projectName};
+            app.create();
         }
         else if (std::string(argv[1]) == std::string("help"))
         {
+            printf("Help !!!\n");
             CLI::showHelp();
         }
         else if (std::string(argv[1]) == std::string("compile"))
         {
+            App app {projectName};
             app.compile();
         }
         else if (std::string(argv[1]) == std::string("run"))
         {
+            App app {projectName};
             app.run();
         }
         else if (std::string(argv[1]) == std::string("build"))
         {
+            App app {projectName};
             app.build();
         }
         else if (std::string(argv[1])==std::string("setup"))
         {
+            App app {projectName};
             app.setup();
         }
         else

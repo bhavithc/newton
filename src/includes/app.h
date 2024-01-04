@@ -3,5 +3,5 @@
 namespace CLI
 {
     int showHelp();
-    int createApp(const char *argv[]);
+    int createApp(int argc, const char *argv[]);
 }
